@@ -44,7 +44,7 @@ contract TestHelper is Test {
         address tokenA,
         address tokenB,
         bytes memory bytecode
-    ) internal view returns (address addr) {
+    ) internal pure returns (address addr) {
         (tokenA, tokenB) = tokenA < tokenB
             ? (tokenA, tokenB)
             : (tokenB, tokenA);

@@ -31,12 +31,20 @@ contract UniswapV2FactoryTest is TestHelper {
             TOTALSUPPLY
         );
 
+        (tokenA, tokenB) = address(tokenA) < address(tokenB)
+            ? (tokenA, tokenB)
+            : (tokenB, tokenA);
         factory = new UniswapV2Factory(owner);
     }
 
     function test_createPair() public {
         bytes memory bytecode = type(UniswapV2Pair).creationCode;
-        address create2Address = getCreate2Address(address(factory), address(tokenA), address(tokenB), bytecode);
+        address create2Address = getCreate2Address(
+            address(factory),
+            address(tokenA),
+            address(tokenB),
+            bytecode
+        );
 
         factory.createPair(address(tokenA), address(tokenB));
         address pairAddress = factory.getPair(address(tokenA), address(tokenB));
@@ -54,5 +62,27 @@ contract UniswapV2FactoryTest is TestHelper {
         assertEq(factory.feeTo(), address(0));
         assertEq(factory.feeToSetter(), owner);
         assertEq(factory.allPairsLength(), 0);
+    }
+
+    // setFeeTo
+    function test_setFeeTo() public {
+        vm.prank(alice);
+        vm.expectRevert("UniswapV2: FORBIDDEN");
+        factory.setFeeTo(alice);
+
+        vm.prank(owner);
+        factory.setFeeTo(alice);
+        assertEq(factory.feeTo(), alice);
+    }
+
+    // setFeeToSetter
+    function test_setFeeToSetter() public {
+        vm.prank(alice);
+        vm.expectRevert("UniswapV2: FORBIDDEN");
+        factory.setFeeToSetter(alice);
+
+        vm.prank(owner);
+        factory.setFeeToSetter(alice);
+        assertEq(factory.feeToSetter(), alice);
     }
 }

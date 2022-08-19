@@ -36,7 +36,6 @@ contract UniswapV2ERC20 is IUniswapV2ERC20 {
                 address(this)
             )
         );
-        _mint(msg.sender, 10000e18);
     }
 
     function _mint(address to, uint256 value) internal {

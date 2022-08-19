@@ -7,8 +7,11 @@ import {UniswapV2Factory} from "../src/UniswapV2Factory.sol";
 import {IUniswapV2Pair} from "../src/interfaces/IUniswapV2Pair.sol";
 import {UniswapV2Pair} from "../src/UniswapV2Pair.sol";
 import {TestERC20} from "./utils/TestERC20.sol";
+import "openzeppelin-contracts/contracts/utils/math/SafeMath.sol";
 
 contract UniswapV2PairTest is TestHelper {
+    using SafeMath for uint256;
+
     IUniswapV2Factory factory;
     TestERC20 tokenA;
     TestERC20 tokenB;
@@ -144,5 +147,67 @@ contract UniswapV2PairTest is TestHelper {
 
         assertEq(tokenA.balanceOf(owner), tokenA.totalSupply() - 1000);
         assertEq(tokenB.balanceOf(owner), tokenB.totalSupply() - 1000);
+    }
+
+    function calc_expectedOutputAmount(uint256 inputAmount, uint256 inputIndex)
+        internal
+        view
+        returns (uint256 outputAmount)
+    {
+        (uint112 _reserve0, uint112 _reserve1, ) = pair.getReserves(); // gas savings
+        uint256 reserve0 = uint256(_reserve0).mul(1000);
+        uint256 reserve1 = uint256(_reserve1).mul(1000);
+        uint256 k = reserve0.mul(reserve1);
+
+        uint256 balanceInputAfter = inputIndex == 0
+            ? reserve0.add(inputAmount.mul(997))
+            : reserve1.add(inputAmount.mul(997));
+
+        outputAmount = k.div(balanceInputAfter);
+        outputAmount = inputIndex == 0
+            ? reserve1.sub(outputAmount).div(1000)
+            : reserve0.sub(outputAmount).div(1000);
+    }
+
+    // swap:token0
+    function test_swap_token0() public {
+        uint256 tokenAmount0 = 5e18;
+        uint256 tokenAmount1 = 10e18;
+        addLiquidity(owner, tokenAmount0, tokenAmount1);
+
+        uint256 swapAmount = 1e18;
+        uint256 expectedOutputAmount = calc_expectedOutputAmount(swapAmount, 0);
+        tokenA.transfer(pairAddress, swapAmount);
+
+        vm.expectEmit(true, true, true, true);
+        emit Transfer(pairAddress, owner, expectedOutputAmount);
+        vm.expectEmit(true, true, true, true);
+        emit Sync(
+            uint112(tokenAmount0 + swapAmount),
+            uint112(tokenAmount1 - expectedOutputAmount)
+        );
+        vm.expectEmit(true, true, true, true);
+        emit Swap(owner, swapAmount, 0, 0, expectedOutputAmount, owner);
+
+        pair.swap(0, expectedOutputAmount, owner, "");
+
+        (uint112 _reserve0, uint112 _reserve1, ) = pair.getReserves();
+        assertEq(_reserve0, uint112(tokenAmount0 + swapAmount));
+        assertEq(_reserve1, uint112(tokenAmount1 - expectedOutputAmount));
+
+        assertEq(tokenA.balanceOf(pairAddress), tokenAmount0 + swapAmount);
+        assertEq(
+            tokenB.balanceOf(pairAddress),
+            tokenAmount1 - expectedOutputAmount
+        );
+
+        assertEq(
+            tokenA.balanceOf(owner),
+            tokenA.totalSupply() - tokenAmount0 - swapAmount
+        );
+        assertEq(
+            tokenB.balanceOf(owner),
+            tokenB.totalSupply() - tokenAmount1 + expectedOutputAmount
+        );
     }
 }

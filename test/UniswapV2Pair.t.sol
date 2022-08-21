@@ -213,7 +213,7 @@ contract UniswapV2PairTest is TestHelper {
         );
     }
 
-    function test_swap_test_cases(
+    function test_swap_token0_fuzzing(
         uint112 swapAmount,
         uint112 tokenAmount0,
         uint112 tokenAmount1
@@ -238,5 +238,32 @@ contract UniswapV2PairTest is TestHelper {
         pair.swap(0, expectedOutputAmount.add(1), owner, "");
 
         pair.swap(0, expectedOutputAmount, owner, "");
+    }
+
+    function test_swap_token1_fuzzing(
+        uint112 swapAmount,
+        uint112 tokenAmount0,
+        uint112 tokenAmount1
+    ) public {
+        vm.assume(tokenAmount0 >= 1e18 && tokenAmount0 < type(uint112).max);
+        vm.assume(tokenAmount1 >= 1e18 && tokenAmount1 < type(uint112).max);
+        vm.assume(
+            swapAmount > 5e17 && swapAmount < type(uint112).max - tokenAmount1
+        );
+
+        addLiquidity(owner, uint256(tokenAmount0), uint256(tokenAmount1));
+        uint256 expectedOutputAmount = calc_expectedOutputAmount(
+            uint256(swapAmount),
+            1
+        );
+
+        vm.prank(owner);
+        tokenB.mint(owner, swapAmount);
+        tokenB.transfer(pairAddress, uint256(swapAmount));
+
+        vm.expectRevert("UniswapV2: K");
+        pair.swap(expectedOutputAmount.add(1), 0, owner, "");
+
+        pair.swap(expectedOutputAmount, 0, owner, "");
     }
 }

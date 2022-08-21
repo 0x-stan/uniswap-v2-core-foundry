@@ -69,7 +69,39 @@ contract UniswapV2PairTest is TestHelper {
         pair = UniswapV2Pair(pairAddress);
     }
 
-    // mint
+    function addLiquidity(
+        address minter,
+        uint256 tokenAmount0,
+        uint256 tokenAmount1
+    ) internal {
+        vm.prank(owner);
+        tokenA.mint(owner, tokenAmount0);
+        tokenB.mint(owner, tokenAmount1);
+        tokenA.transfer(pairAddress, tokenAmount0);
+        tokenB.transfer(pairAddress, tokenAmount1);
+        pair.mint(minter);
+    }
+
+    function calc_expectedOutputAmount(uint256 inputAmount, uint256 inputIndex)
+        internal
+        view
+        returns (uint256 outputAmount)
+    {
+        (uint112 _reserve0, uint112 _reserve1, ) = pair.getReserves(); // gas savings
+        uint256 reserve0 = uint256(_reserve0).mul(1000);
+        uint256 reserve1 = uint256(_reserve1).mul(1000);
+        uint256 k = reserve0.mul(reserve1);
+
+        uint256 balanceInputAfter = inputIndex == 0
+            ? reserve0.add(inputAmount.mul(997))
+            : reserve1.add(inputAmount.mul(997));
+
+        outputAmount = k.div(balanceInputAfter);
+        outputAmount = inputIndex == 0
+            ? reserve1.sub(outputAmount).div(1000)
+            : reserve0.sub(outputAmount).div(1000);
+    }
+
     function test_mint() public {
         uint256 tokenAmount0 = 1e18;
         uint256 tokenAmount1 = 4e18;
@@ -105,16 +137,6 @@ contract UniswapV2PairTest is TestHelper {
         assertEq(reserve1, tokenAmount1);
     }
 
-    function addLiquidity(
-        address minter,
-        uint256 tokenAmount0,
-        uint256 tokenAmount1
-    ) internal {
-        tokenA.transfer(pairAddress, tokenAmount0);
-        tokenB.transfer(pairAddress, tokenAmount1);
-        pair.mint(minter);
-    }
-
     function test_burn() public {
         uint256 tokenAmount0 = 3e18;
         uint256 tokenAmount1 = 3e18;
@@ -147,26 +169,6 @@ contract UniswapV2PairTest is TestHelper {
 
         assertEq(tokenA.balanceOf(owner), tokenA.totalSupply() - 1000);
         assertEq(tokenB.balanceOf(owner), tokenB.totalSupply() - 1000);
-    }
-
-    function calc_expectedOutputAmount(uint256 inputAmount, uint256 inputIndex)
-        internal
-        view
-        returns (uint256 outputAmount)
-    {
-        (uint112 _reserve0, uint112 _reserve1, ) = pair.getReserves(); // gas savings
-        uint256 reserve0 = uint256(_reserve0).mul(1000);
-        uint256 reserve1 = uint256(_reserve1).mul(1000);
-        uint256 k = reserve0.mul(reserve1);
-
-        uint256 balanceInputAfter = inputIndex == 0
-            ? reserve0.add(inputAmount.mul(997))
-            : reserve1.add(inputAmount.mul(997));
-
-        outputAmount = k.div(balanceInputAfter);
-        outputAmount = inputIndex == 0
-            ? reserve1.sub(outputAmount).div(1000)
-            : reserve0.sub(outputAmount).div(1000);
     }
 
     // swap:token0
@@ -209,5 +211,32 @@ contract UniswapV2PairTest is TestHelper {
             tokenB.balanceOf(owner),
             tokenB.totalSupply() - tokenAmount1 + expectedOutputAmount
         );
+    }
+
+    function test_swap_test_cases(
+        uint112 swapAmount,
+        uint112 tokenAmount0,
+        uint112 tokenAmount1
+    ) public {
+        vm.assume(tokenAmount0 >= 1e18 && tokenAmount0 < type(uint112).max);
+        vm.assume(tokenAmount1 >= 1e18 && tokenAmount1 < type(uint112).max);
+        vm.assume(
+            swapAmount > 5e17 && swapAmount < type(uint112).max - tokenAmount0
+        );
+
+        addLiquidity(owner, uint256(tokenAmount0), uint256(tokenAmount1));
+        uint256 expectedOutputAmount = calc_expectedOutputAmount(
+            uint256(swapAmount),
+            0
+        );
+
+        vm.prank(owner);
+        tokenA.mint(owner, swapAmount);
+        tokenA.transfer(pairAddress, uint256(swapAmount));
+
+        vm.expectRevert("UniswapV2: K");
+        pair.swap(0, expectedOutputAmount.add(1), owner, "");
+
+        pair.swap(0, expectedOutputAmount, owner, "");
     }
 }
